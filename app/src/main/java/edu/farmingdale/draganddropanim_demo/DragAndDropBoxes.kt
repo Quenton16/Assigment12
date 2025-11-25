@@ -8,7 +8,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.repeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -31,8 +30,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -50,12 +54,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
-//private val rotation = FloatPropKey()
-
 
 @Composable
 fun DragAndDropBoxes(modifier: Modifier = Modifier) {
-    var isPlaying by remember { mutableStateOf(true) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var offset by remember { mutableStateOf(IntOffset(0, 0)) }
+    val icons = listOf(
+        Icons.Filled.ArrowUpward,
+        Icons.Filled.ArrowDownward,
+        Icons.AutoMirrored.Filled.ArrowBack,
+        Icons.AutoMirrored.Filled.ArrowForward
+    )
+
     Column(modifier = Modifier.fillMaxSize()) {
 
         Row(
@@ -63,12 +73,11 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .weight(0.2f)
         ) {
-            val boxCount = 4
             var dragBoxIndex by remember {
                 mutableIntStateOf(0)
             }
 
-            repeat(boxCount) { index ->
+            repeat(icons.size) { index ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -84,8 +93,19 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
                             target = remember {
                                 object : DragAndDropTarget {
                                     override fun onDrop(event: DragAndDropEvent): Boolean {
-                                        isPlaying = !isPlaying
                                         dragBoxIndex = index
+                                        when (index) {
+                                            0 -> { // UP
+                                                offset = offset.copy(y = offset.y - 50)
+                                                isPlaying = true
+                                            }
+                                            1 -> { // DOWN
+                                                offset = offset.copy(y = offset.y + 50)
+                                                isPlaying = false
+                                            }
+                                            2 -> offset = offset.copy(x = offset.x - 50) // Move Left
+                                            3 -> offset = offset.copy(x = offset.x + 50) // Move Right
+                                        }
                                         return true
                                     }
                                 }
@@ -99,8 +119,8 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
                         exit = scaleOut() + fadeOut()
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ArrowForward,
-                            contentDescription = "Right",
+                            imageVector = icons[index],
+                            contentDescription = "Directional Arrow",
                             tint = Color.Red,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -124,37 +144,38 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
             }
         }
 
-
-        val pOffset by animateIntOffsetAsState(
-            targetValue = when (isPlaying) {
-                true -> IntOffset(130, 300)
-                false -> IntOffset(130, 100)
-            },
-            animationSpec = tween(3000, easing = LinearEasing)
-        )
-
         val rtatView by animateFloatAsState(
-            targetValue = if (isPlaying) 360f else 0.0f,
-            // Configure the animation duration and easing.
+            targetValue = if (isPlaying) 360f else 0f,
             animationSpec = repeatable(
                 iterations = if (isPlaying) 10 else 1,
                 tween(durationMillis = 3000, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart
             )
         )
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(0.8f)
-                .background(Color.LightGray)
+                .background(Color.LightGray),
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .size(100.dp)
-                    .offset(pOffset.x.dp, pOffset.y.dp)
+                    .offset { offset }
                     .rotate(rtatView)
                     .background(Color.Blue)
             )
+
+            Button(
+                onClick = { offset = IntOffset(0, 0) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+            ) {
+                Text("Reset")
+            }
         }
     }
 }
