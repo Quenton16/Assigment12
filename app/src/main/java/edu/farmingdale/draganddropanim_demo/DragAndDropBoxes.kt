@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.repeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -30,16 +31,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,31 +50,33 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
 
 
 @Composable
 fun DragAndDropBoxes(modifier: Modifier = Modifier) {
-    var isPlaying by remember { mutableStateOf(false) }
-    var offset by remember { mutableStateOf(IntOffset(0, 0)) }
-    val icons = listOf(
-        Icons.Filled.ArrowUpward,
-        Icons.Filled.ArrowDownward,
-        Icons.AutoMirrored.Filled.ArrowBack,
-        Icons.AutoMirrored.Filled.ArrowForward
-    )
+    // Controls the continuous rotation of the rectangle.
+    var isPlaying by remember { mutableStateOf(true) }
+
+    // Indicates the current drop direction: -1 for up, +1 for down, 0 for centre.
+    var dropDirection by remember { mutableStateOf(0) }
+
+    // Index of the currently active drop box.  Used to show the arrow in the
+    // selected box.
+    var dragBoxIndex by remember { mutableStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-
+        // Row of drop boxes.  A drag operation can be started on the arrow
+        // displayed in the active box.  When dropped onto a target the
+        // dragBoxIndex and dropDirection states are updated accordingly.
         Row(
             modifier = modifier
                 .fillMaxWidth()
                 .weight(0.2f)
         ) {
-            var dragBoxIndex by remember {
-                mutableIntStateOf(0)
-            }
-
-            repeat(icons.size) { index ->
+            val boxCount = 4
+            repeat(boxCount) { index ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -93,19 +92,13 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
                             target = remember {
                                 object : DragAndDropTarget {
                                     override fun onDrop(event: DragAndDropEvent): Boolean {
+                                        // Toggle rotation on each drop.
+                                        isPlaying = !isPlaying
                                         dragBoxIndex = index
-                                        when (index) {
-                                            0 -> { // UP
-                                                offset = offset.copy(y = offset.y - 50)
-                                                isPlaying = true
-                                            }
-                                            1 -> { // DOWN
-                                                offset = offset.copy(y = offset.y + 50)
-                                                isPlaying = false
-                                            }
-                                            2 -> offset = offset.copy(x = offset.x - 50) // Move Left
-                                            3 -> offset = offset.copy(x = offset.x + 50) // Move Right
-                                        }
+                                        // Determine animation direction based on which half of the row
+                                        // the drop occurred in.  The first half moves the
+                                        // rectangle upwards, the second half moves it downwards.
+                                        dropDirection = if (index < boxCount / 2) -1 else 1
                                         return true
                                     }
                                 }
@@ -118,10 +111,10 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
                         enter = scaleIn() + fadeIn(),
                         exit = scaleOut() + fadeOut()
                     ) {
+                        // Replace the textual "Right" command with a right‑arrow icon.
                         Icon(
-                            imageVector = icons[index],
-                            contentDescription = "Directional Arrow",
-                            tint = Color.Red,
+                            imageVector = Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "Drag me",
                             modifier = Modifier
                                 .fillMaxSize()
                                 .dragAndDropSource {
@@ -137,45 +130,65 @@ fun DragAndDropBoxes(modifier: Modifier = Modifier) {
                                             )
                                         }
                                     )
-                                }
+                                },
+                            tint = Color.Red
                         )
                     }
                 }
             }
         }
 
-        val rtatView by animateFloatAsState(
-            targetValue = if (isPlaying) 360f else 0f,
+        // Animate the rectangle's position based on the drop direction.
+        val pOffset by animateIntOffsetAsState(
+            targetValue = when (dropDirection) {
+                -1 -> IntOffset(130, 100) // Upwards
+                1 -> IntOffset(130, 300)  // Downwards
+                else -> IntOffset(130, 200) // Centre
+            },
+            animationSpec = tween(3000, easing = LinearEasing),
+            label = "pOffset"
+        )
+
+        // Animate rotation.  When isPlaying is true we rotate continuously,
+        // otherwise we reset to zero rotation.
+        val rotation by animateFloatAsState(
+            targetValue = if (isPlaying) 360f else 0.0f,
             animationSpec = repeatable(
                 iterations = if (isPlaying) 10 else 1,
                 tween(durationMillis = 3000, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart
-            )
+            ),
+            label = "rotation"
         )
 
+        // Lower area containing the moving rectangle.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.8f)
-                .background(Color.LightGray),
-            contentAlignment = Alignment.Center
+                .weight(0.7f)
+                .background(Color.Red)
         ) {
+            // Draw the rectangle.  We apply rotation and translation via
+            // rotate() and offset().
             Box(
                 modifier = Modifier
-                    .size(100.dp)
-                    .offset { offset }
-                    .rotate(rtatView)
-                    .background(Color.Blue)
+                    .size(60.dp)
+                    .offset(pOffset.x.dp, pOffset.y.dp)
+                    .rotate(rotation)
+                    .background(Color.Yellow)
             )
+        }
 
-            Button(
-                onClick = { offset = IntOffset(0, 0) },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp)
-            ) {
-                Text("Reset")
-            }
+        // Reset button.  Tapping this resets the drop direction which in turn
+        // returns the rectangle to the centre of the screen.
+        Button(
+            onClick = {                dropDirection = 0
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(text = "Reset", fontSize = 18.sp)
         }
     }
 }
